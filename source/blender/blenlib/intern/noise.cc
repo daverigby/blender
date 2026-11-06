@@ -482,7 +482,7 @@ BLI_INLINE float select_float(const bool condition,
                               const float true_value,
                               const float false_value)
 {
-  const float c = float(condition);
+  const float c = math::bool_to_float(condition);
   return c * true_value + (1 - c) * false_value;
 }
 

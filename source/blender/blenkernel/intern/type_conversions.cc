@@ -12,6 +12,7 @@
 
 #include "BLI_color.hh"
 #include "BLI_cpp_type.hh"
+#include "BLI_math_base.hh"
 #include "BLI_math_euler.hh"
 #include "BLI_math_quaternion.hh"
 #include "BLI_math_vector.hh"
@@ -499,7 +500,7 @@ static ColorGeometry4b int8_to_byte_color(const int8_t &a)
 
 static float bool_to_float(const bool &a)
 {
-  return float(a);
+  return math::bool_to_float(a);
 }
 static int8_t bool_to_int8(const bool &a)
 {
