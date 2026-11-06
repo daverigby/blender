@@ -59,31 +59,38 @@ class MF_SeparateXYZ : public mf::MultiFunction {
     MutableSpan<float> ys = params.uninitialized_single_output_if_required<float>(2, "Y");
     MutableSpan<float> zs = params.uninitialized_single_output_if_required<float>(3, "Z");
 
-    std::array<MutableSpan<float>, 3> outputs = {xs, ys, zs};
-    Vector<int> used_outputs;
-    if (!xs.is_empty()) {
-      used_outputs.append(0);
-    }
-    if (!ys.is_empty()) {
-      used_outputs.append(1);
-    }
-    if (!zs.is_empty()) {
-      used_outputs.append(2);
+    const int output_mask = int(!xs.is_empty()) | (int(!ys.is_empty()) << 1) |
+                            (int(!zs.is_empty()) << 2);
+    if (output_mask == 0) {
+      return;
     }
 
     devirtualize_varray(vectors, [&](auto vectors) {
-      mask.foreach_segment_optimized([&](const auto segment) {
-        const int used_outputs_num = used_outputs.size();
-        const int *used_outputs_data = used_outputs.data();
-
-        for (const int64_t i : segment) {
-          const float3 &vector = vectors[i];
-          for (const int out_i : IndexRange(used_outputs_num)) {
-            const int coordinate = used_outputs_data[out_i];
-            outputs[coordinate][i] = vector[coordinate];
+      auto process_outputs = [&]<int OutputMask>() {
+        mask.foreach_segment_optimized([&](const auto segment) {
+          for (const int64_t i : segment) {
+            const float3 &vector = vectors[i];
+            if constexpr (OutputMask & 1) {
+              xs[i] = vector[0];
+            }
+            if constexpr (OutputMask & 2) {
+              ys[i] = vector[1];
+            }
+            if constexpr (OutputMask & 4) {
+              zs[i] = vector[2];
+            }
           }
-        }
-      });
+        });
+      };
+      switch (output_mask) {
+        case 1: process_outputs.template operator()<1>(); break;
+        case 2: process_outputs.template operator()<2>(); break;
+        case 3: process_outputs.template operator()<3>(); break;
+        case 4: process_outputs.template operator()<4>(); break;
+        case 5: process_outputs.template operator()<5>(); break;
+        case 6: process_outputs.template operator()<6>(); break;
+        case 7: process_outputs.template operator()<7>(); break;
+      }
     });
   }
 };
