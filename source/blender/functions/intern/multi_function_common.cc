@@ -175,6 +175,77 @@ class DivideFunction : public MultiFunction {
   }
 };
 
+/** Avoid normalizing a single Refract normal separately for every element. */
+class RefractFunction : public MultiFunction {
+ private:
+  static inline const MultiFunction *refract_generic = nullptr;
+
+ public:
+  RefractFunction()
+  {
+    static Signature signature = []() {
+      static auto generic_fn = build::SI3_SO<float3, float3, float, float3>(
+          "refract generic", [](const float3 &a, const float3 &b, float c) {
+            return math::refract(a, math::normalize(b), c);
+          });
+      refract_generic = &generic_fn;
+
+      Signature signature;
+      SignatureBuilder builder("refract(float3, float3, float)", signature);
+      builder.single_input<float3>("Incident");
+      builder.single_input<float3>("Normal");
+      builder.single_input<float>("Eta");
+      builder.single_output<float3>("Result");
+      return signature;
+    }();
+    this->set_signature(&signature);
+  }
+
+  void call(const IndexMask &mask, Params params, Context context) const override
+  {
+    const VArray<float3> &normal = params.readonly_single_input<float3>(1, "Normal");
+    if (!normal.is_single()) {
+      refract_generic->call(mask, params, context);
+      return;
+    }
+
+    const float3 normalized_normal = math::normalize(normal.get_internal_single());
+    const VArray<float3> &incident = params.readonly_single_input<float3>(0, "Incident");
+    const VArray<float> &eta = params.readonly_single_input<float>(2, "Eta");
+    MutableSpan<float3> result = params.uninitialized_single_output<float3>(3, "Result");
+
+    if (eta.is_single()) {
+      const float eta_single = eta.get_internal_single();
+      multi_eval::evaluate_chunked_varray<"io", 64>(
+          [normalized_normal, eta_single](const int64_t size,
+                                          const float3 *incidents,
+                                          float3 *results) {
+            for (const int64_t i : IndexRange(size)) {
+              results[i] = math::refract(incidents[i], normalized_normal, eta_single);
+            }
+          },
+          mask,
+          incident,
+          result);
+    }
+    else {
+      multi_eval::evaluate_chunked_varray<"iio", 64>(
+          [normalized_normal](const int64_t size,
+                              const float3 *incidents,
+                              const float *etas,
+                              float3 *results) {
+            for (const int64_t i : IndexRange(size)) {
+              results[i] = math::refract(incidents[i], normalized_normal, etas[i]);
+            }
+          },
+          mask,
+          incident,
+          eta,
+          result);
+    }
+  }
+};
+
 static void register_common_functions_impl()
 {
   static constexpr auto exec_fast = build::exec_presets::AllSpanOrSingle();
@@ -470,12 +541,7 @@ static void register_common_functions_impl()
         },
         exec_fast);
   });
-  registry::add_new_cb([] {
-    return build::SI3_SO<float3, float3, float, float3>(
-        "refract(float3, float3, float)", [](const float3 &a, const float3 &b, float c) {
-          return math::refract(a, math::normalize(b), c);
-        });
-  });
+  registry::add_new_cb([] { return RefractFunction(); });
   registry::add_new_cb([] {
     return build::SI1_SO<float3, float>(
         "length(float3)", [](const float3 &a) { return math::length(a); }, exec_fast);
