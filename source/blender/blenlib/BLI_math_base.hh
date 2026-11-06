@@ -20,6 +20,12 @@ namespace blender::math {
 template<typename T> inline constexpr bool is_math_float_type = std::is_floating_point_v<T>;
 template<typename T> inline constexpr bool is_math_integral_type = std::is_integral_v<T>;
 
+inline float bool_to_float(const bool value)
+{
+  /* The intermediate int facilitates auto-vectorization with GCC 14/15. */
+  return float(int(value));
+}
+
 template<typename T> inline bool is_zero(const T &a)
 {
   return a == T(0);
