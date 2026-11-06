@@ -345,9 +345,24 @@ static void interpolate_in_faces(const OffsetIndices<int> faces,
       const T &v1 = src[src_index(face[1])];
       const T &v2 = src[src_index(face[2])];
       const T &v3 = src[src_index(face[3])];
-      for (const ElementRange &range : ranges) {
-        for (const int i : range.coords.index_range()) {
-          dst[range.elements[i]] = Mixer::quad(weights[range.coords[i]], v0, v1, v2, v3);
+      if constexpr (std::is_same_v<T, math::Quaternion>) {
+        /* These source rotations are shared by every subdivided element of the face. */
+        const float3 e0 = v0.expmap();
+        const float3 e1 = v1.expmap();
+        const float3 e2 = v2.expmap();
+        const float3 e3 = v3.expmap();
+        for (const ElementRange &range : ranges) {
+          for (const int i : range.coords.index_range()) {
+            const float3 mixed = attribute_math::mix4(weights[range.coords[i]], e0, e1, e2, e3);
+            dst[range.elements[i]] = math::Quaternion::expmap(mixed);
+          }
+        }
+      }
+      else {
+        for (const ElementRange &range : ranges) {
+          for (const int i : range.coords.index_range()) {
+            dst[range.elements[i]] = Mixer::quad(weights[range.coords[i]], v0, v1, v2, v3);
+          }
         }
       }
       continue;
